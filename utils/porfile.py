@@ -1,5 +1,8 @@
 import numpy as np
 import utils.constants as cst
+import datetime as dt
+
+# https://youtu.be/MfT0YCWPev8 - listen to this to cope with the terrible code
 
 class Noeud:
     """
@@ -41,9 +44,25 @@ class Poutre:
     def __init__(self, point1, point2):
         self.point1 = point1
         self.point2 = point2
-    def __iter__(self):
-        yield self.point1
-        yield self.point2
+    def __iter__(self, deg=0, keep=False): #can you even iterate over a beam?
+        if deg == 0:
+            if keep:
+                yield self.point1 
+                yield self.point2
+            else:
+                yield Noeud(self.point1.loc)
+                yield Noeud(self.point2.loc)
+        else:
+            for i in range(deg+2):
+                if not keep:
+                    yield Noeud(self.point1.loc + (self.point2.loc - self.point1.loc) * (i / (deg + 1)))
+                    continue
+                if i == 0:
+                    yield self.point1
+                    continue
+                if i == deg + 1:
+                    yield self.point2
+
     def __repr__(self):
         return f"Poutre({self.point1}, {self.point2})"
     def length(self):
@@ -68,7 +87,7 @@ class Fichier:
     def __init__(self, *args):
         self.sections = [i for i in args if isinstance(i, Block)]
         self.meta = {}
-        self.init_meta()
+        self.init_meta() #THE META OF THE HOLY CROSS
         for sect in self.sections:
             self.bind(sect)
     def init_meta(self):
@@ -88,7 +107,7 @@ class Fichier:
     def write(self, file, info=cst.DEFAULT_INFO):
         file.write(info)
         file.write(cst.FILE_START)
-        file.write(cst.DEFAULT_FILE_HEADER)
+        file.write(cst.DEFAULT_FILE_HEADER.format(""))
         nodesblocks = [s for s in self.sections if isinstance(s, Noeuds)]
         KEY = cst.POINTS_COUNT_KEY
         file.write(f"noeuds {self.meta.get(KEY, 0)}\n")
@@ -119,7 +138,6 @@ class Noeuds(Block):
         self.autojoin = autojoin
         self.closed = closed
     def _setup(self, parentfile:Fichier):
-        parentfile.meta[cst.POINTS_COUNT_KEY] = parentfile.meta.get(cst.POINTS_COUNT_KEY, 0)
         self.parentfile = parentfile
         for point in self.nodes:
             point.idx = parentfile.meta[cst.POINTS_COUNT_KEY]
@@ -151,7 +169,6 @@ class Poutres(Block):
         self.name = "poutres"
         self.poutres: list[Poutre] = [i for i in args if isinstance(i, Poutre)]
     def _setup(self, parentfile):
-        parentfile.meta[cst.POUTRES_COUNT_KEY] = parentfile.meta.get(cst.POUTRES_COUNT_KEY, 0)
         self.parentfile = parentfile
         for poutre in self.poutres:
             poutre.idx = parentfile.meta[cst.POUTRES_COUNT_KEY] + 1
@@ -159,11 +176,9 @@ class Poutres(Block):
     def __iter__(self):
         return iter(self.poutres)
     def write(self, file):
-        file.write(f"${self.name} ( {len(self.poutres)} )\n")
-        for i, poutre in enumerate(self.poutres):
+        for poutre in self.poutres:
             # Example: 1 RIRI     7    1  1.00000000000E+000  0.00000000000E+000  0.00000000000E+000 11 11
             file.write(poutre.frmt())
-        file.write("   0\n")
 
 class Liaisons(Block):
     class Elastique:
@@ -174,7 +189,7 @@ class Liaisons(Block):
             self.stiffness = stiffness
             self.point = point
         def __repr__(self):
-            return f"Elastique({self.point}, {self.type}, {self.stiffness})"
+            return f"Elastique({self.point}, {self.type}, {self.stiffness:.11E})"
         def format(self):
             return f"elastique {self.type} {self.stiffness:.11E} {self.point.idx}\n"
     class Imposer:
@@ -184,7 +199,7 @@ class Liaisons(Block):
             self.valeur = valeur
             self.point = point
         def __repr__(self):
-            return f"Imposer({self.point}, {self.type})"
+            return f"Imposer({self.point}, {self.type}, {self.valeur:.11E})"
         def format(self):
             return f"imposer {self.type} {self.valeur:.11E} {self.point.idx}\n"
     class Encastremement:
@@ -206,14 +221,29 @@ class Liaisons(Block):
         self.name = "liaisons"
         self.liaisons = [i for i in args if isinstance(i, Noeud)]
     def _setup(self, parentfile):
-        pass
+        self.parentfile = parentfile
     def write(self, file):
         for liaison in self.liaisons:
-            if isinstance(liaison, self.Elastique):
+            if isinstance(liaison, Liaisons.Elastique):
                 file.write(liaison.format())
-            elif isinstance(liaison, self.Imposer):
+            elif isinstance(liaison, Liaisons.Imposer):
                 file.write(liaison.format())
-            elif isinstance(liaison, self.Encastremement):
+            elif isinstance(liaison, Liaisons.Encastremement):
                 file.write(liaison.format())
-            elif isinstance(liaison, self.Rotule):
+            elif isinstance(liaison, Liaisons.Rotule):
                 file.write(liaison.format())
+
+class Composant:
+    def __init__(self):
+        self.meta = {}
+    def __repr__(self):
+        return f"Composant({self.meta})"
+    def _setup(self, parentfile):
+        self.parentfile = parentfile
+    def bind(self, section):
+        return self.parentfile.bind(section)
+    def resolve(self):
+        """This method should be overridden by subclasses.
+        It computes the necessary blocks to be added to the parent file.
+        """
+        raise NotImplementedError("Subclasses should implement this method.")
