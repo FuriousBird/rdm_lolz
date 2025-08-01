@@ -1,6 +1,7 @@
 # Metadata keys for indexing and counting
 POINTS_COUNT_KEY = "Pts_Count"
 POUTRES_COUNT_KEY = "Poutres_Count"
+LIAISONS_COUNT_KEY = "Liaisons_Count"
 
 # Default file information header
 DEFAULT_INFO = """   RDM - Ossatures

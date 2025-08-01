@@ -1,5 +1,5 @@
 import numpy as np
-from utils.porfile import Points, Liaisons, Point, Poutre, Poutres, Empty, Fichier
+from utils.porfile import Noeuds, Liaisons, Noeud, Poutre, Poutres, Empty, Fichier
 
 edgeL = 1e-3
 N = 5
@@ -15,7 +15,7 @@ for i in range(A):
     for j in range(B):
         location = [i * edgeL, j * edgeL]
         if matches(i,j,A,B):
-            points.append(Point(location))
+            points.append(Noeud(location))
             pointidx[(i, j)] = len(points) - 1
 
 edges = []
@@ -30,7 +30,7 @@ for i in range(A):
 
 
 fichier = Fichier(
-    Points(*points),
+    Noeuds(*points),
     Poutres(*[Poutre(*edge) for edge in edges]),
 )
 
