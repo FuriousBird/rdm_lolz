@@ -1,13 +1,5 @@
 import numpy as np
-
-DEFAULT_INFO = """   RDM - Ossatures
-   Calcul des Structures par la Methode des elements Finis
-
-   Version  - 7.04 - 5 mars 2020
-
-   Utilisateur : Gab
-
-"""
+import utils.constants as cst
 
 class Point:
     """
@@ -54,9 +46,9 @@ class Poutre:
         return f"Poutre({self.point1}, {self.point2})"
     def length(self):
         return self.point1.distance(self.point2)
-    def vecR(self):
-        return ((self.point2-self.point1)^Point((0,0,1))).normalize()
-    
+    def vecR(self, other=Point((0, 0, 1))):
+        return ((self.point2-self.point1)^other).normalize()
+
 class Block:
     def __init__(self, name):
         self.name = name
@@ -64,28 +56,16 @@ class Block:
     def __iter__(self):
         yield self.name
 
-class Empty(Block):
-    def __init__(self, num):
-        self.num = num
-    def __iter__(self):
-        yield "\n"*self.num
+class Literal(Block):
+    def __init__(self, text):
+        super().__init__(text)
+        self.text = text
+    def 
 
 class Fichier:
     def __init__(self, *args):
         self.sections = [i for i in args if isinstance(i, Block)]
         self.meta = {}
-        self.meta["header"] = """$version
-7.04
-$SI unites
-$nom du fichier
-rmd_test.por
-$date
-28/7/2025
-$heure
-18/50/51
-$ossature
-plancher
-"""
         for sect in self.sections:
             sect.parentfile = self
             if hasattr(sect, '_setup'):
@@ -100,26 +80,25 @@ plancher
             raise TypeError("Only Block instances can be bound to Fichier")
     def __iter__(self):
         return iter(self.sections)
-    def write(self, file, info=DEFAULT_INFO):
+    def write(self, file, info=cst.DEFAULT_INFO):
         file.write(info)
-        file.write("$debut du fichier\n")
-        file.write(self.meta["header"])
+        file.write(cst.FILE_START)
+        file.write(cst.DEFAULT_FILE_HEADER)
         for section in self.sections:
             for line in section:
                 file.write(line + "\n")
-        file.write("$fin du fichier\n")
+        file.write(cst.FILE_END)
 
 class Points(Block):
     def __init__(self, *args):
         self.name="nodes"
         self.points = [i for i in args if isinstance(i, Point)]
     def _setup(self, parentfile):
-        KEY = "Pts_Count"
-        parentfile.meta[KEY] = parentfile.meta.get(KEY, 0)
+        parentfile.meta[cst.POINTS_COUNT_KEY] = parentfile.meta.get(cst.POINTS_COUNT_KEY, 0)
         self.parentfile = parentfile
         for point in self.points:
-            point.idx = parentfile.meta[KEY]
-            parentfile.meta[KEY] += 1
+            point.idx = parentfile.meta[cst.POINTS_COUNT_KEY]
+            parentfile.meta[cst.POINTS_COUNT_KEY] += 1
     def build_quadtree(self):
         from scipy.spatial import cKDTree
         coords = np.array([point.loc for point in self.points])
@@ -141,26 +120,23 @@ class Points(Block):
 class Poutres(Block):
     def __init__(self, *args):
         self.name = "poutres"
-        self.poutres = [i for i in args if isinstance(i, Poutre)]
+        self.poutres: list[Poutre] = [i for i in args if isinstance(i, Poutre)]
     def _setup(self, parentfile):
-        KEY = "Poutres_Count"
-        parentfile.meta[KEY] = parentfile.meta.get(KEY, 0)
+        parentfile.meta[cst.POUTRES_COUNT_KEY] = parentfile.meta.get(cst.POUTRES_COUNT_KEY, 0)
         self.parentfile = parentfile
         for poutre in self.poutres:
-            poutre.idx = parentfile.meta[KEY] + 1
-            parentfile.meta[KEY] += 1
+            poutre.idx = parentfile.meta[cst.POUTRES_COUNT_KEY] + 1
+            parentfile.meta[cst.POUTRES_COUNT_KEY] += 1
     def __iter__(self):
         return iter(self.poutres)
     def write(self, file):
         file.write(f"${self.name} ( {len(self.poutres)} )\n")
         for i, poutre in enumerate(self.poutres):
             # Example: 1 RIRI     7    1  1.00000000000E+000  0.00000000000E+000  0.00000000000E+000 11 11
-            idx = i + 1
-            typ = "RIRI"
             n1 = poutre.point1.idx + 1
             n2 = poutre.point2.idx + 1
             vec = poutre.vecR().loc
-            file.write(f"   {idx} {typ}     {n1:2d}    {n2:2d} {vec[0]:.11E} {vec[1]:.11E} {vec[2]:.11E} 11 11\n")
+            file.write(f"   {i+1} {cst.POUTRE_TYPE}     {n1:2d}    {n2:2d} {vec[0]:.11E} {vec[1]:.11E} {vec[2]:.11E} 11 11\n")
         file.write("   0\n")
 
 class Liaisons(Block):
